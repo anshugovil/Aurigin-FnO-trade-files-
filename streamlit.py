@@ -1,53 +1,8 @@
-@staticmethod
-    def get_futures_code(date_str: str) -> Tuple[Optional[str], Optional[str]]:
-        """Get futures month and year code"""
-        dt = DateUtils.parse_date(date_str)
-        if not dt:
-            return None, None
-        return MONTH_CODE.get(dt.month), str(dt.year)[-1]
-    
-    @staticmethod
-    def get_nifty_weekly_suffix(exp_dt: datetime) -> str:
-        """Calculate NIFTY weekly option suffix"""
-        cutoff = date(2025, 9, 1)
-        target_wd = 3 if exp_dt.date() < cutoff else 1
-        
-        first_day = date(exp_dt.year, exp_dt.month, 1)
-        _, ndays = calendar.monthrange(exp_dt.year, exp_dt.month)
-        days = [first_day + timedelta(days=i) for i in range(ndays)]
-        targets = [d for d in days if d.weekday() == target_wd]
-        
-        if not targets:
-            return ""
-        
-        d0 = exp_dt.date()
-        nearest = min(targets, key=lambda d: abs((d - d0).days))
-        
-        if nearest == targets[-1]:
-            return ""
-        
-        ordinal = targets.index(nearest) + 1
-        suffixes = {1: "C", 2: "D", 3: "E", 4: "F"}
-        return suffixes.get(ordinal, "")
-
-class TickerBuilder:
-    """Build security tickers based on rules"""
-    
-    def __init__(self, futures_map: Dict[str, str]):
-        self.futures_map = futures_map
-        self.index_map = INDEX_OPTIONS_MAPPING
-    
-    def build_option_ticker(self, instrument: str, symbol: str, expiry: str, 
-                           strike: str, option_type: str) -> str:
-        """Build option ticker string"""
-        exp_fmt = DateUtils.format_mmddyy(expiry)
-        cp = self._get_cp_letter(option_type)
-        
-        strike = str(strike).replace(",", "").replace(r'\.0+#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Streamlit App for Aurigin Trade Transformer
-Run with: streamlit run aurigin_streamlit.py
+Run with: streamlit run streamlit.py
 """
 
 import streamlit as st
@@ -169,7 +124,49 @@ class DateUtils:
     def get_futures_code(date_str: str) -> Tuple[Optional[str], Optional[str]]:
         """Get futures month and year code"""
         dt = DateUtils.parse_date(date_str)
-        if not dt, '')
+        if not dt:
+            return None, None
+        return MONTH_CODE.get(dt.month), str(dt.year)[-1]
+    
+    @staticmethod
+    def get_nifty_weekly_suffix(exp_dt: datetime) -> str:
+        """Calculate NIFTY weekly option suffix"""
+        cutoff = date(2025, 9, 1)
+        target_wd = 3 if exp_dt.date() < cutoff else 1
+        
+        first_day = date(exp_dt.year, exp_dt.month, 1)
+        _, ndays = calendar.monthrange(exp_dt.year, exp_dt.month)
+        days = [first_day + timedelta(days=i) for i in range(ndays)]
+        targets = [d for d in days if d.weekday() == target_wd]
+        
+        if not targets:
+            return ""
+        
+        d0 = exp_dt.date()
+        nearest = min(targets, key=lambda d: abs((d - d0).days))
+        
+        if nearest == targets[-1]:
+            return ""
+        
+        ordinal = targets.index(nearest) + 1
+        suffixes = {1: "C", 2: "D", 3: "E", 4: "F"}
+        return suffixes.get(ordinal, "")
+
+
+class TickerBuilder:
+    """Build security tickers based on rules"""
+    
+    def __init__(self, futures_map: Dict[str, str]):
+        self.futures_map = futures_map
+        self.index_map = INDEX_OPTIONS_MAPPING
+    
+    def build_option_ticker(self, instrument: str, symbol: str, expiry: str, 
+                           strike: str, option_type: str) -> str:
+        """Build option ticker string"""
+        exp_fmt = DateUtils.format_mmddyy(expiry)
+        cp = self._get_cp_letter(option_type)
+        
+        strike = str(strike).replace(",", "").replace(r'\.0+$', '')
         
         if instrument == "OPTSTK":
             ticker = self.futures_map.get(symbol, "UPDATE")
@@ -210,6 +207,7 @@ class DateUtils:
             return "P"
         return ""
 
+
 # ====================
 # TRADE PROCESSOR
 # ====================
@@ -241,133 +239,7 @@ def process_trades(df_input: pd.DataFrame, futures_map: Dict[str, str], trade_da
         
         if "strike" in data:
             data["strike"] = data["strike"].str.replace(",", "", regex=False)
-            data["strike"] = data["strike"].str.replace(r'\.0+#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Streamlit App for Aurigin Trade Transformer
-Run with: streamlit run aurigin_streamlit.py
-"""
-
-import streamlit as st
-import pandas as pd
-import io
-import sys
-import re
-import calendar
-import requests
-from pathlib import Path
-from datetime import datetime, date, timedelta
-from typing import Dict, List, Optional, Tuple, Any
-import warnings
-import base64
-warnings.filterwarnings('ignore')
-
-# ====================
-# STREAMLIT PAGE CONFIG
-# ====================
-
-st.set_page_config(
-    page_title="Aurigin Trade Transformer",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# ====================
-# GITHUB CONFIGURATION
-# ====================
-
-GITHUB_MAPPING_URL = "https://raw.githubusercontent.com/anshugovil/Aurigin-FnO-trade-files-/main/futures%20mapping.csv"
-
-# ====================
-# CONSTANTS
-# ====================
-
-EXCEL_PASSWORD = "Aurigin2017"
-
-MONTH_CODE = {
-    1: "F", 2: "G", 3: "H", 4: "J", 5: "K", 6: "M",
-    7: "N", 8: "Q", 9: "U", 10: "V", 11: "X", 12: "Z"
-}
-
-INPUT_COLUMNS = {
-    "tm_name": 3,        # Column 4: TM NAME
-    "instrument": 4,     # Column 5: INSTR
-    "symbol": 5,         # Column 6: Symbol
-    "expiry": 6,         # Column 7: Expiry Date
-    "strike": 8,         # Column 9: Strike Price
-    "option_type": 9,    # Column 10: Option Type (CE/PE)
-    "side": 10,          # Column 11: B/S (Buy/Sell)
-    "quantity": 12,      # Column 13: QTY
-    "price": 13          # Column 14: Avg Price
-}
-
-INDEX_OPTIONS_MAPPING = {
-    "NIFTY": "NIFTY",
-    "NSEBANK": "NSEBANK",
-    "BANKNIFTY": "NSEBANK",
-    "NMIDSELP": "NMIDSELP",
-    "MIDCPNIFTY": "NMIDSELP",
-    "FINNIFTY": "FINNIFTY",
-    "NIFTYFIN": "FINNIFTY"
-}
-
-# Fallback mapping if GitHub fails
-DEFAULT_FUTURES_MAPPING = {
-    "NIFTY": "NIFTY",
-    "BANKNIFTY": "NSEBANK",
-    "FINNIFTY": "FINNIFTY",
-    "MIDCPNIFTY": "NMIDSELP"
-}
-
-# ====================
-# UTILITY CLASSES
-# ====================
-
-class DateUtils:
-    """Date parsing and formatting utilities"""
-    
-    @staticmethod
-    def parse_date(date_str: str) -> Optional[datetime]:
-        """Parse date string to datetime"""
-        s = str(date_str).strip().replace(".", "/").replace("-", "/")
-        formats = [
-            "%d/%m/%Y", "%d/%m/%y", "%m/%d/%Y", 
-            "%m/%d/%y", "%Y/%m/%d", "%Y/%d/%m"
-        ]
-        
-        for fmt in formats:
-            try:
-                return datetime.strptime(s, fmt)
-            except:
-                continue
-        
-        try:
-            dt = pd.to_datetime(s, dayfirst=True, errors="coerce")
-            if not pd.isna(dt):
-                return dt.to_pydatetime()
-        except:
-            pass
-        
-        return None
-    
-    @staticmethod
-    def format_mmddyy(date_str: str) -> str:
-        """Format date as MM/DD/YY"""
-        dt = DateUtils.parse_date(date_str)
-        return dt.strftime("%m/%d/%y") if dt else ""
-    
-    @staticmethod
-    def format_yyyymmdd(date_str: str) -> str:
-        """Format date as YYYYMMDD"""
-        dt = DateUtils.parse_date(date_str)
-        return dt.strftime("%Y%m%d") if dt else ""
-    
-    @staticmethod
-    def get_futures_code(date_str: str) -> Tuple[Optional[str], Optional[str]]:
-        """Get futures month and year code"""
-        dt = DateUtils.parse_date(date_str)
-        if not dt, '', regex=True)
+            data["strike"] = data["strike"].str.replace(r'\.0+$', '', regex=True)
         
         return data
     
@@ -482,11 +354,13 @@ class DateUtils:
     
     return out_options, out_futures
 
+
 def get_download_link(df: pd.DataFrame, filename: str) -> str:
     """Generate a download link for a dataframe"""
     csv = df.to_csv(index=False, encoding="utf-8-sig")
     b64 = base64.b64encode(csv.encode()).decode()
     return f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 Download {filename}</a>'
+
 
 def load_futures_mapping_from_github(url: str) -> Dict[str, str]:
     """Load futures mapping from GitHub"""
@@ -505,6 +379,7 @@ def load_futures_mapping_from_github(url: str) -> Dict[str, str]:
         st.warning(f"Could not load mapping from GitHub: {e}")
         st.info("Using fallback default mapping")
         return DEFAULT_FUTURES_MAPPING.copy()
+
 
 # ====================
 # STREAMLIT APP
@@ -723,131 +598,6 @@ def main():
     st.markdown("---")
     st.markdown("**Aurigin Trade Transformer** | GitHub: anshugovil/Aurigin-FnO-trade-files-")
 
+
 if __name__ == "__main__":
-    main()#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Streamlit App for Aurigin Trade Transformer
-Run with: streamlit run aurigin_streamlit.py
-"""
-
-import streamlit as st
-import pandas as pd
-import io
-import sys
-import re
-import calendar
-import requests
-from pathlib import Path
-from datetime import datetime, date, timedelta
-from typing import Dict, List, Optional, Tuple, Any
-import warnings
-import base64
-warnings.filterwarnings('ignore')
-
-# ====================
-# STREAMLIT PAGE CONFIG
-# ====================
-
-st.set_page_config(
-    page_title="Aurigin Trade Transformer",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# ====================
-# GITHUB CONFIGURATION
-# ====================
-
-GITHUB_MAPPING_URL = "https://raw.githubusercontent.com/anshugovil/Aurigin-FnO-trade-files-/main/futures%20mapping.csv"
-
-# ====================
-# CONSTANTS
-# ====================
-
-EXCEL_PASSWORD = "Aurigin2017"
-
-MONTH_CODE = {
-    1: "F", 2: "G", 3: "H", 4: "J", 5: "K", 6: "M",
-    7: "N", 8: "Q", 9: "U", 10: "V", 11: "X", 12: "Z"
-}
-
-INPUT_COLUMNS = {
-    "tm_name": 3,        # Column 4: TM NAME
-    "instrument": 4,     # Column 5: INSTR
-    "symbol": 5,         # Column 6: Symbol
-    "expiry": 6,         # Column 7: Expiry Date
-    "strike": 8,         # Column 9: Strike Price
-    "option_type": 9,    # Column 10: Option Type (CE/PE)
-    "side": 10,          # Column 11: B/S (Buy/Sell)
-    "quantity": 12,      # Column 13: QTY
-    "price": 13          # Column 14: Avg Price
-}
-
-INDEX_OPTIONS_MAPPING = {
-    "NIFTY": "NIFTY",
-    "NSEBANK": "NSEBANK",
-    "BANKNIFTY": "NSEBANK",
-    "NMIDSELP": "NMIDSELP",
-    "MIDCPNIFTY": "NMIDSELP",
-    "FINNIFTY": "FINNIFTY",
-    "NIFTYFIN": "FINNIFTY"
-}
-
-# Fallback mapping if GitHub fails
-DEFAULT_FUTURES_MAPPING = {
-    "NIFTY": "NIFTY",
-    "BANKNIFTY": "NSEBANK",
-    "FINNIFTY": "FINNIFTY",
-    "MIDCPNIFTY": "NMIDSELP"
-}
-
-# ====================
-# UTILITY CLASSES
-# ====================
-
-class DateUtils:
-    """Date parsing and formatting utilities"""
-    
-    @staticmethod
-    def parse_date(date_str: str) -> Optional[datetime]:
-        """Parse date string to datetime"""
-        s = str(date_str).strip().replace(".", "/").replace("-", "/")
-        formats = [
-            "%d/%m/%Y", "%d/%m/%y", "%m/%d/%Y", 
-            "%m/%d/%y", "%Y/%m/%d", "%Y/%d/%m"
-        ]
-        
-        for fmt in formats:
-            try:
-                return datetime.strptime(s, fmt)
-            except:
-                continue
-        
-        try:
-            dt = pd.to_datetime(s, dayfirst=True, errors="coerce")
-            if not pd.isna(dt):
-                return dt.to_pydatetime()
-        except:
-            pass
-        
-        return None
-    
-    @staticmethod
-    def format_mmddyy(date_str: str) -> str:
-        """Format date as MM/DD/YY"""
-        dt = DateUtils.parse_date(date_str)
-        return dt.strftime("%m/%d/%y") if dt else ""
-    
-    @staticmethod
-    def format_yyyymmdd(date_str: str) -> str:
-        """Format date as YYYYMMDD"""
-        dt = DateUtils.parse_date(date_str)
-        return dt.strftime("%Y%m%d") if dt else ""
-    
-    @staticmethod
-    def get_futures_code(date_str: str) -> Tuple[Optional[str], Optional[str]]:
-        """Get futures month and year code"""
-        dt = DateUtils.parse_date(date_str)
-        if not dt
+    main()
